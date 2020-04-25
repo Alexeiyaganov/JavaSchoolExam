@@ -1,98 +1,191 @@
 package com.tsystems.javaschool.tasks.calculator;
 
-import java.util.Stack;
 
-public class EvaluateString
-{
-    public static double evaluate(String expression)
-    {
-        char[] tokens = expression.toCharArray();
+import java.util.*;
 
-        Stack<Double> value_st = new Stack<Double>();  // стек для чисел
+public class Calculator {
 
-        Stack<Character> oper_st = new Stack<Character>();   //  cтек для операторов
+    /**
+     * Evaluate statement represented as string.
+     *
+     * @param statement mathematical statement containing digits, '.' (dot) as decimal mark,
+     *                  parentheses, operations signs '+', '-', '*', '/'<br>
+     *                  Example: <code>(1 + 38) * 4.5 - 1 / 2.</code>
+     * @return string value containing result of evaluation or null if statement is invalid
+     */
 
-        for (int i = 0; i < tokens.length; i++)
-        {
-            if (tokens[i] == ' ')   // текущий символ-пробел, пропускаем
-                continue;
+    private static String operators = "+-*/";
+    private static String delimiters = "() ";
+    public static boolean flag = true;
+    private static Map<String, Integer> priorityMap;
+    private static Set<String> delimiterSet;
+    private static Set<String> operatorSet;
+    static {
+        priorityMap = new HashMap<>();
+        delimiterSet = new HashSet<>();
+        operatorSet = new HashSet<>();
+        priorityMap.put("(", 1);
+        priorityMap.put("-", 2);
+        priorityMap.put("+", 2);
+        priorityMap.put("*", 3);
+        priorityMap.put("/", 3);
+        for (int i = 0; i < delimiters.length(); i++) {
+            delimiterSet.add("" + delimiters.charAt(i));
+        }
+        for (int i = 0; i < operators.length(); i++) {
+            operatorSet.add("" + operators.charAt(i));
+        }
+    }
 
-            if (tokens[i] >= '0' && tokens[i] <= '9')
-            {
-                StringBuffer sbuf = new StringBuffer();
-                while (i < tokens.length && tokens[i] >= '0' && tokens[i] <= '9')   // учитываем многозначные числа
-                    sbuf.append(tokens[i++]);
-                value_st.push(Double.parseDouble(sbuf.toString()));  // преобразуем в Integer и заносим в стек число
+    private static boolean isDelimiter(String token) {
+        return delimiterSet.contains(token);
+    }
+
+    private static boolean isOperator(String token) {
+        return operatorSet.contains(token);
+    }
+
+    private static int priority(String token) throws CalculatorParseException{
+        int priority = priorityMap.get(token);
+        if (token == null)
+            throw new CalculatorParseException("wrong priority item");
+        return priority;
+    }
+
+    private static TokenType typeRecognizer(String token) {
+        if (token.equals(" "))
+            return TokenType.SPACE;
+        if (isOperator(token))
+            return TokenType.OPERATOR;
+        if (isDelimiter(token))
+            return TokenType.DELIMITER;
+        return TokenType.OPERAND;
+    }
+
+    private enum TokenType{
+        SPACE,
+        OPERAND,
+        OPERATOR,
+        DELIMITER
+    }
+
+    public static List<String> parse(String infix) throws CalculatorParseException {
+        List<String> strOut = new ArrayList<String>();
+        Deque<String> stack = new ArrayDeque<String>();
+        StringTokenizer tokenizer = new StringTokenizer(infix, delimiters + operators, true);
+        String prev = "";
+        String curr = "";
+        while (tokenizer.hasMoreTokens()) {
+            curr = tokenizer.nextToken();
+            switch (typeRecognizer(curr)) {
+                case SPACE:
+                    continue;
+
+                case OPERAND:
+                    strOut.add(curr);
+                    break;
+
+                case DELIMITER:
+                    if (curr.equals("(")) stack.push(curr);
+                    else if (curr.equals(")")) {
+                        while (!stack.peek().equals("(")) {
+                            strOut.add(stack.pop());
+                            if (stack.isEmpty()) {
+                                throw new CalculatorParseException("Parentheses unpaired");
+                            }
+                        }
+                        stack.pop();
+                    }
+                    break;
+
+                case OPERATOR:
+                    if (!tokenizer.hasMoreTokens()) {
+                        throw new CalculatorParseException("Incorrect syntax");
+                    }
+                    if (curr.equals("-") && (prev.equals("") || (isDelimiter(prev)  && !prev.equals(")")))) {
+                        strOut.add("0");
+                    }
+                    else {
+                        while (!stack.isEmpty() && (priority(curr) <= priority(stack.peek()))) {
+                            strOut.add(stack.pop());
+                        }
+
+                    }
+                    stack.push(curr);
+                    break;
             }
-
-            else if (tokens[i] == '(')   // открывающуюся скобку заносим в стек операторов
-                oper_st.push(tokens[i]);
-
-            else if (tokens[i] == ')')  // при текущей закрывающейся скобки-решаем все, что находится между открывающейся и этой
-            {
-                while (oper_st.peek() != '(')
-                    value_st.push(applyOp(oper_st.pop(), value_st.pop(), value_st.pop())); // cама операция
-                oper_st.pop();
-            }
-
-            // текущий символ-оператор
-            else if (tokens[i] == '+' || tokens[i] == '-' ||
-                    tokens[i] == '*' || tokens[i] == '/')
-            {
-
-                // пока оператор в стеке имеет болший приоритет, чем текущий-
-                // используем его с двумя числами в вершине стека чисел
-                while (!oper_st.empty() && hasPrecedence(tokens[i], oper_st.peek()))
-                    value_st.push(applyOp(oper_st.pop(), value_st.pop(), value_st.pop()));
-
-                oper_st.push(tokens[i]);   //Заносим текущий оператор в стек операторов
-            }
+            if (isOperator(prev) && isOperator(curr))
+                throw new CalculatorParseException("two operands in a row operand");
+            prev = curr;
         }
 
-
-        while (!oper_st.empty())
-            value_st.push(applyOp(oper_st.pop(), value_st.pop(), value_st.pop()));  // производим операции, пока стек операторов не станет пустым
-
-        // В конце в концов в стеке значений останется результат-возвращаем его
-        return value_st.pop();
-    }
-
-
-    // Возвращает true, если второй оператор имеет высший приоритет, иначе false
-    public static boolean hasPrecedence(char op1, char op2)
-    {
-        if (op2 == '(' || op2 == ')')
-            return false;
-        if ((op1 == '*' || op1 == '/') && (op2 == '+' || op2 == '-'))
-            return false;
-        else
-            return true;
-    }
-
-    // Процесс операции с двумя числами
-    public static double applyOp(char op, double b, double a)
-    {
-        switch (op)
-        {
-            case '+':
-                return a + b;
-            case '-':
-                return a - b;
-            case '*':
-                return a * b;
-            case '/':
-                if (b == 0)
-                    throw new
-                            UnsupportedOperationException("Cannot divide by zero");
-                return a / b;
+        while (!stack.isEmpty()) {
+            if (isOperator(stack.peek())) strOut.add(stack.pop());
+            else {
+                throw new CalculatorParseException("Parentheses unpaired");
+            }
         }
-        return 0;
+        return strOut;
     }
 
-    public static void main(String[] args)
-    {
-        System.out.println(EvaluateString.evaluate("( 1 + 38 ) * 4 - 5"));
-        System.out.println(EvaluateString.evaluate("7 * 6 / 2 + 8"));
-        System.out.println(EvaluateString.evaluate("1 / 0"));
+    public static Double calc(List<String> strOut) throws CalculateException {
+        Deque<Double> stack = new ArrayDeque<Double>();
+        Double a, b;
+        for (String x : strOut) {
+            switch (x) {
+                case "+":
+                    stack.push(stack.pop() + stack.pop());
+                    break;
+
+                case "-":
+                    b = stack.pop();
+                    a = stack.pop();
+                    stack.push(a - b);
+                    break;
+
+                case "*":
+                    stack.push(stack.pop() * stack.pop());
+                    break;
+
+                case "/":
+                    b = stack.pop();
+                    if (b == 0)
+                        throw new CalculateException("division by null");
+                    a = stack.pop();
+                    stack.push(a / b);
+                    break;
+
+                default:
+                    try {
+                        stack.push(Double.parseDouble(x));
+                        break;
+                    } catch (NumberFormatException e) {
+                        throw new CalculateException("Element parse error");
+                    }
+            }
+        }
+        return stack.pop();
     }
+
+    public String evaluate(String statement) {
+        if (statement == null || statement == "")
+            return null;
+        String stringResult;
+        try {
+            Double doubleResult = calc(parse(statement));
+            if (doubleResult == Math.floor(doubleResult)) {
+                stringResult = String.valueOf(doubleResult.intValue());
+            } else {
+                stringResult = String.valueOf(doubleResult);
+            }
+        } catch (CalculatorParseException cpe) {
+            System.out.println(cpe.getMessage());
+            return null;
+        } catch (CalculateException ce){
+            System.out.println(ce.getMessage());
+            return null;
+        }
+        return stringResult;
+    }
+
 }
